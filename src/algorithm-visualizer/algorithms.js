@@ -1,7 +1,7 @@
 import * as utils from "./utils";
 
 // DFS
-export async function dfs(start, end, grid, run, speed, setGrid, setResult) {
+export async function dfs(start, end, grid, run, speed, setGrid) {
   var dirs = [
     [-1, 0], // up
     [0, 1], // right

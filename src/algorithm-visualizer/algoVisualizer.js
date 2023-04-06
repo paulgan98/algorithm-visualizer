@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./algoVisualizer.css";
 import * as algorithms from "./algorithms";
-import * as utils from "./utils";
+const blocks = require("./blocks");
+const utils = require("./utils");
+const mazeGenerator = require("./mazeGenerator");
 
 const DEBUG = false;
 
@@ -67,31 +69,26 @@ export default function AlgorithmVisualizer(props) {
   let [grid, setGrid] = useState(tempGrid);
 
   function runSearch(start, end) {
+    run.current = true;
+    let res = null;
     if (algorithm === "dfs")
-      return algorithms.dfs(start, end, grid, run, speed, setGrid, setResult);
+      res = algorithms.dfs(start, end, grid, run, speed, setGrid);
     else if (algorithm === "bfs")
-      return algorithms.bfs(start, end, grid, run, speed, setGrid, setResult);
+      res = algorithms.bfs(start, end, grid, run, speed, setGrid);
     else if (algorithm === "bfsShortestPath")
-      return algorithms.bfsShortestPath(
-        start,
-        end,
-        grid,
-        run,
-        speed,
-        setGrid,
-        setResult
-      );
+      res = algorithms.bfsShortestPath(start, end, grid, run, speed, setGrid);
+
+    return res;
   }
 
-  // set all v1's in grid to v2
-  function changeAll(v1, v2, grid) {
-    for (let r = 0; r < grid.length; r++) {
-      for (let c = 0; c < grid[0].length; c++) {
-        if (grid[r][c] === v1) {
-          grid[r][c] = v2;
-        }
-      }
-    }
+  function resetVisited() {
+    run.current = false;
+
+    let newGrid = [...grid];
+    utils.changeAll(blocks.visited, blocks.empty, newGrid);
+    utils.changeAll(blocks.path, blocks.empty, newGrid);
+    setGrid(newGrid);
+    setResult("-");
   }
 
   useEffect(() => {
@@ -104,12 +101,12 @@ export default function AlgorithmVisualizer(props) {
       if (isLeftMouseDown.current) {
         if (result !== "-") setResult("-");
         // if shift is pressed, we are adding wall (n = 4)
-        if (isShiftDown.current) n = 4;
-        else n = 2;
+        if (isShiftDown.current) n = blocks.wall;
+        else n = blocks.source; // source block
       } else if (isRightMouseDown.current) {
         if (result !== "-") setResult("-");
-        if (isShiftDown.current) n = 0;
-        else n = 3;
+        if (isShiftDown.current) n = blocks.empty;
+        else n = blocks.sink; // sink block
       } else {
         return;
       }
@@ -118,27 +115,34 @@ export default function AlgorithmVisualizer(props) {
       if (n === grid[hoverRow.current][hoverCol.current]) return;
 
       // if clearing start point -> return
-      if (grid[hoverRow.current][hoverCol.current] === 2) return;
+      if (grid[hoverRow.current][hoverCol.current] === blocks.source) return;
 
-      if (grid[hoverRow.current][hoverCol.current] === 2)
+      // if attempting to place start/end point on wall -> return
+      if (
+        (n === blocks.source || n === blocks.sink) &&
+        grid[hoverRow.current][hoverCol.current] === blocks.wall
+      )
+        return;
+
+      if (grid[hoverRow.current][hoverCol.current] === blocks.source)
         setStartPos({ r: -1, c: -1 });
-      if (grid[hoverRow.current][hoverCol.current] === 3)
+      if (grid[hoverRow.current][hoverCol.current] === blocks.sink)
         setEndPos({ r: -1, c: -1 });
 
       // if setting start/end point, remove other start/end points from grid, and set startPos
-      if (n === 2) {
-        changeAll(n, 0, grid);
+      if (n === blocks.source) {
+        utils.changeAll(n, blocks.empty, grid);
         setStartPos({ r: hoverRow.current, c: hoverCol.current });
-      } else if (n === 3) {
-        changeAll(n, 0, grid);
+      } else if (n === blocks.sink) {
+        utils.changeAll(n, blocks.empty, grid);
         setEndPos({ r: hoverRow.current, c: hoverCol.current });
       }
 
       // update grid with new value, and trigger a rerender
       let newGrid = [...grid];
       newGrid[hoverRow.current][hoverCol.current] = n;
-      changeAll(1, 0, newGrid); // clear all visited blocks in grid
-      changeAll(5, 0, newGrid); // clear all path blocks in grid
+      utils.changeAll(blocks.visited, blocks.empty, newGrid); // clear all visited blocks in grid
+      utils.changeAll(blocks.path, blocks.empty, newGrid); // clear all path blocks in grid
       setGrid(newGrid);
       run.current = false; // stop currently running algorithms
     }
@@ -158,27 +162,30 @@ export default function AlgorithmVisualizer(props) {
       const opacity = "dd";
       var color = "";
       // unvisited block
-      if (grid[j][i] === 0) {
+      if (grid[j][i] === blocks.empty) {
         color = "#ffffff";
       }
       // visited block
-      else if (grid[j][i] === 1) {
-        color = "#00ff00";
+      else if (grid[j][i] === blocks.visited) {
+        // color = "#00ff00";
+        color = "#3ded97";
       }
       // start block
-      else if (grid[j][i] === 2) {
-        color = "#ff0000";
+      else if (grid[j][i] === blocks.source) {
+        // color = "#ff0000";
+        color = "#d21f3c";
       }
       // end block
-      else if (grid[j][i] === 3) {
-        color = "#0000cc";
+      else if (grid[j][i] === blocks.sink) {
+        // color = "#0000cc";
+        color = "#1aa7ec";
       }
       // wall block
-      else if (grid[j][i] === 4) {
+      else if (grid[j][i] === blocks.wall) {
         color = "#444444";
       }
       // path block
-      else if (grid[j][i] === 5) {
+      else if (grid[j][i] === blocks.path) {
         color = "#ffff00";
       }
 
@@ -255,7 +262,10 @@ export default function AlgorithmVisualizer(props) {
     }
 
     function handleKeyDown(e, canvas) {
-      if (e.keyCode === 16) isShiftDown.current = true;
+      if (e.keyCode === 16) {
+        e.preventDefault();
+        isShiftDown.current = true;
+      }
 
       // return if click did not occur within canvas
       const rect = canvas.getBoundingClientRect();
@@ -401,8 +411,8 @@ export default function AlgorithmVisualizer(props) {
               <div
                 className="mr-5"
                 onClick={() => {
-                  run.current = false;
                   setAlgorithm("bfs");
+                  resetVisited();
                 }}
               >
                 <label>
@@ -413,8 +423,8 @@ export default function AlgorithmVisualizer(props) {
                     value={algorithm}
                     checked={algorithm === "bfs"}
                     onChange={() => {
-                      run.current = false;
                       setAlgorithm("bfs");
+                      resetVisited();
                     }}
                   />
                   BFS
@@ -423,8 +433,8 @@ export default function AlgorithmVisualizer(props) {
               <div
                 className="mr-5"
                 onClick={() => {
-                  run.current = false;
                   setAlgorithm("dfs");
+                  resetVisited();
                 }}
               >
                 <label>
@@ -435,8 +445,8 @@ export default function AlgorithmVisualizer(props) {
                     value={algorithm}
                     checked={algorithm === "dfs"}
                     onChange={() => {
-                      run.current = false;
                       setAlgorithm("dfs");
+                      resetVisited();
                     }}
                   />
                   DFS
@@ -445,8 +455,8 @@ export default function AlgorithmVisualizer(props) {
               <div
                 className="mr-5"
                 onClick={() => {
-                  run.current = false;
                   setAlgorithm("bfsShortestPath");
+                  resetVisited();
                 }}
               >
                 <label>
@@ -457,8 +467,8 @@ export default function AlgorithmVisualizer(props) {
                     value={algorithm}
                     checked={algorithm === "bfsShortestPath"}
                     onChange={() => {
-                      run.current = false;
                       setAlgorithm("bfsShortestPath");
+                      resetVisited();
                     }}
                   />
                   BFS Shortest Path
@@ -544,17 +554,13 @@ export default function AlgorithmVisualizer(props) {
               onClick={() => {
                 if (startPos.r === -1) return;
 
-                setResult("-");
+                resetVisited();
 
-                run.current = false;
-                changeAll(1, 0, grid);
-                changeAll(5, 0, grid);
-
-                run.current = true;
                 const prom = runSearch(startPos, endPos);
                 if (run.current) {
                   prom.then((res) => {
                     setResult(res);
+                    run.current = false;
                   });
                 }
               }}
@@ -564,14 +570,7 @@ export default function AlgorithmVisualizer(props) {
             <button
               className="block"
               onClick={() => {
-                run.current = false;
-                setResult("-");
-
-                let newGrid = [...grid];
-                changeAll(1, 0, newGrid);
-                changeAll(5, 0, newGrid);
-
-                setGrid(newGrid);
+                resetVisited();
               }}
             >
               Clear Visited
@@ -579,21 +578,30 @@ export default function AlgorithmVisualizer(props) {
             <button
               className="block"
               onClick={() => {
-                run.current = false;
-                setResult("-");
-
-                let newGrid = [...grid];
-                changeAll(4, 0, newGrid);
-
-                setGrid(newGrid);
+                resetVisited();
+                utils.changeAll(blocks.wall, blocks.empty, grid);
               }}
             >
               Clear Walls
             </button>
+            <button
+              className="block"
+              onClick={() => {
+                resetVisited();
+                setGrid(
+                  mazeGenerator.generateMaze(nRows.current, nCols.current)
+                );
+              }}
+            >
+              Generate Maze
+            </button>
           </div>
 
           <div className="options-block">
-            <p>Result: {`${result}`}</p>
+            <p>
+              {algorithm === "bfsShortestPath" ? "Path Length" : "Result"}:
+              {` ${result}`}
+            </p>
           </div>
         </div>
       </div>

@@ -2,6 +2,13 @@ input[type="radio"] {
   vertical-align: baseline;
 }
 
+input[type="range"],
+.prevent-select {
+  -webkit-user-select: none; /* Safari */
+  -ms-user-select: none; /* IE 10 and IE 11 */
+  user-select: none; /* Standard syntax */
+}
+
 .options-block {
   margin-block-end: 20px;
   padding: 5px;
